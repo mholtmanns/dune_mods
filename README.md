@@ -2,7 +2,7 @@
 
 This Python app listens for a global hotkey (German **STRG+ALT+.**, i.e. `Ctrl+Alt+.`), captures a cropped area of the screen that contains an inventory/resource list associated with an item to be fabricated, and processes screenshots in the background using a queue system. Each screenshot is split into 8 tiles, pre-screened with Tesseract OCR, sent to a local vision LLM (Ollama), and the recognized items update a CSV file.
 
-The app only works properly if thee screenshot is taken while viewing any of the fabricators production screens.
+The app only works properly if the screenshot is taken while viewing any of the fabricators production screens.
 
 **Key Features:**
 - **Background processing**: Take multiple screenshots without waiting - they're queued and processed asynchronously
