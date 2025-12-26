@@ -11,6 +11,13 @@ The app only works properly if thee screenshot is taken while viewing any of the
 
 The CSV file is called `inventory_log.csv` and will be created in the same folder as the script by default.
 
+### ToDo
+
+Implement a simple UI to define things like
+- Interactive CSV file selection
+- Interactive Monitor and crop region selection
+- Adding small status window for task progress
+
 ### Project Structure
 
 The app is organized into a modular structure:
