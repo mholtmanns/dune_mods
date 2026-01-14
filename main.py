@@ -57,34 +57,12 @@ def handle_hotkey() -> None:
         traceback.print_exc()
 
 
-def main() -> None:
-    global VERBOSE
-
-    parser = argparse.ArgumentParser(
-        description="Capture a cropped screen region, split into 8 images, "
-        "send each to a vision LLM, and log inventory data to CSV."
-    )
-    parser.add_argument(
-        "-v",
-        "--verbose",
-        action="store_true",
-        help="Enable verbose/debug output.",
-    )
-    parser.add_argument(
-        "--config",
-        action="store_true",
-        help="Show configuration UI and exit.",
-    )
-
-    args = parser.parse_args()
-    VERBOSE = args.verbose
+def start_app(verbose: bool = False) -> None:
+    """Start the main application (hotkey listener and queue processor)."""
+    global VERBOSE, queue_processor
     
-    # If --config flag is set, show UI and exit
-    if args.config:
-        from inventory_app.ui import show_config_ui
-        show_config_ui()
-        return
-
+    VERBOSE = verbose
+    
     print("Inventory Screenshot App")
     print("========================")
     print(f"Hotkey: {HOTKEY}  (German STRG+ALT+.)")
@@ -98,7 +76,6 @@ def main() -> None:
     ensure_csv_header(CSV_PATH, verbose=VERBOSE)
 
     # Initialize and start the queue processor
-    global queue_processor
     queue_processor = QueueProcessor(verbose=VERBOSE)
     queue_processor.start()
     print("✓ Background queue processor started")
@@ -118,7 +95,7 @@ def main() -> None:
         print("3. Try a different hotkey combination (e.g., 'ctrl+alt+l')", file=sys.stderr)
         print("4. If using 'ctrl+alt+.' (period), try 'ctrl+alt+period' instead", file=sys.stderr)
         queue_processor.stop()
-        sys.exit(1)
+        raise
     
     # Verify hotkey is actually working (optional verbose check)
     if VERBOSE:
@@ -141,6 +118,36 @@ def main() -> None:
             queue_processor.stop()
         keyboard.unhook_all()  # Clean up hotkey registration
         print("Shutdown complete.")
+
+
+def main() -> None:
+    global VERBOSE
+
+    parser = argparse.ArgumentParser(
+        description="Capture a cropped screen region, split into 8 images, "
+        "send each to a vision LLM, and log inventory data to CSV."
+    )
+    parser.add_argument(
+        "-v",
+        "--verbose",
+        action="store_true",
+        help="Enable verbose/debug output.",
+    )
+    parser.add_argument(
+        "--no-ui",
+        action="store_true",
+        help="Start the app directly without showing the UI (legacy mode).",
+    )
+
+    args = parser.parse_args()
+    VERBOSE = args.verbose
+    
+    # Default behavior: show UI. Use --no-ui to start app directly
+    if not args.no_ui:
+        from inventory_app.ui import show_config_ui
+        show_config_ui()
+    else:
+        start_app(verbose=VERBOSE)
 
 
 if __name__ == "__main__":

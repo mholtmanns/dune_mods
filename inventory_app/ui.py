@@ -1,8 +1,10 @@
 """
 UI module for displaying and configuring application settings.
 """
+import sys
+import threading
 import tkinter as tk
-from tkinter import ttk
+from tkinter import ttk, messagebox
 from typing import Any, Dict
 
 import inventory_app.config as config
@@ -13,8 +15,9 @@ class ConfigUI:
     
     def __init__(self, root: tk.Tk):
         self.root = root
-        self.root.title("Inventory Screenshot App - Configuration")
-        self.root.geometry("600x500")
+        self.root.title("Inventory Screenshot App")
+        self.root.geometry("600x550")
+        self.app_running = False
         
         # Create main frame with padding
         main_frame = ttk.Frame(root, padding="10")
@@ -26,7 +29,7 @@ class ConfigUI:
         main_frame.columnconfigure(1, weight=1)
         
         # Title
-        title_label = ttk.Label(main_frame, text="Current Configuration", font=("Arial", 14, "bold"))
+        title_label = ttk.Label(main_frame, text="Configuration", font=("Arial", 14, "bold"))
         title_label.grid(row=0, column=0, columnspan=2, pady=(0, 20))
         
         # Get configuration values
@@ -38,9 +41,77 @@ class ConfigUI:
             self._add_config_row(main_frame, key, value, row)
             row += 1
         
+        # Status label
+        self.status_label = ttk.Label(main_frame, text="App Status: Not Running", 
+                                      font=("Arial", 9, "italic"), foreground="gray")
+        self.status_label.grid(row=row, column=0, columnspan=2, pady=(20, 10))
+        row += 1
+        
+        # Button frame
+        button_frame = ttk.Frame(main_frame)
+        button_frame.grid(row=row, column=0, columnspan=2, pady=(10, 0))
+        
+        # Start App button
+        self.start_button = ttk.Button(button_frame, text="Start App", 
+                                       command=self._start_app, width=15)
+        self.start_button.pack(side=tk.LEFT, padx=5)
+        
         # Close button
-        close_button = ttk.Button(main_frame, text="Close", command=self.root.destroy)
-        close_button.grid(row=row, column=0, columnspan=2, pady=(20, 0))
+        close_button = ttk.Button(button_frame, text="Close", 
+                                  command=self.root.destroy, width=15)
+        close_button.pack(side=tk.LEFT, padx=5)
+    
+    def _start_app(self) -> None:
+        """Start the main application in a background thread."""
+        if self.app_running:
+            messagebox.showwarning("Already Running", "The app is already running!")
+            return
+        
+        try:
+            # Import start_app function directly to avoid circular imports
+            from main import start_app
+            
+            # Start app in background thread
+            self.app_running = True
+            self.start_button.config(state=tk.DISABLED, text="Starting...")
+            self.status_label.config(text="App Status: Starting...", foreground="orange")
+            
+            def run_app():
+                try:
+                    start_app(verbose=False)
+                except Exception as e:
+                    # Show error in UI
+                    self.root.after(0, lambda: self._show_error(str(e)))
+                finally:
+                    self.root.after(0, self._app_stopped)
+            
+            thread = threading.Thread(target=run_app, daemon=True)
+            thread.start()
+            
+            self.status_label.config(text="App Status: Running (check console for output)", 
+                                    foreground="green")
+            self.start_button.config(text="Running...", state=tk.DISABLED)
+            
+            messagebox.showinfo("App Started", 
+                               f"App is now running in the background.\n\n"
+                               f"Hotkey: {config.HOTKEY}\n"
+                               f"Check the console window for output.\n\n"
+                               f"You can close this window - the app will continue running.")
+            
+        except Exception as e:
+            self._show_error(f"Failed to start app: {e}")
+            self._app_stopped()
+    
+    def _app_stopped(self) -> None:
+        """Called when the app stops."""
+        self.app_running = False
+        self.start_button.config(state=tk.NORMAL, text="Start App")
+        self.status_label.config(text="App Status: Not Running", foreground="gray")
+    
+    def _show_error(self, error_msg: str) -> None:
+        """Show an error message."""
+        messagebox.showerror("Error", error_msg)
+        self._app_stopped()
     
     def _get_config_values(self) -> Dict[str, Any]:
         """Extract configuration values from config module (excluding PROMPT)."""

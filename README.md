@@ -74,7 +74,11 @@ From the project directory:
 python main.py
 ```
 
-Useful options:
+**By default, this opens a configuration UI window** where you can:
+- View all current configuration settings
+- Click "Start App" to launch the hotkey listener and background processing
+
+**Command-line options:**
 
 - **Help**:
 
@@ -82,21 +86,27 @@ Useful options:
   python main.py --help
   ```
 
+- **Start app directly (skip UI)**:
+
+  ```bash
+  python main.py --no-ui
+  ```
+
+  Starts the app in console mode without showing the UI window (legacy behavior).
+
 - **Verbose/debug output**:
 
   ```bash
   python main.py --verbose
   ```
 
-- **Show configuration UI**:
+  Or combine with UI:
 
   ```bash
-  python main.py --config
+  python main.py --verbose --no-ui
   ```
 
-  This opens a window displaying all current configuration settings (read-only). Useful for quickly checking your setup without editing `config.py`.
-
-You should see a message similar to:
+**When you click "Start App" in the UI**, the app will start in the background. You'll see console output similar to:
 
 ```text
 Inventory Screenshot App
@@ -109,6 +119,8 @@ LLM API URL: http://localhost:11434/api/generate
 Press the hotkey to capture and process a screenshot.
 Press Ctrl+C in this terminal to exit.
 ```
+
+**Note:** You can close the UI window after starting the app - it will continue running in the background. The console window will show all activity.
 
 Now:
 
