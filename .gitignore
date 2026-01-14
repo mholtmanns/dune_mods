@@ -54,6 +54,14 @@ capture_full_*.png
 # CSV files (uncomment if you don't want to track inventory data)
 inventory_log.csv
 
+# User configuration files (not in git)
+config.json
+config.yaml
+config.yml
+*.config.json
+*.config.yaml
+*.config.yml
+
 # Environment variables
 .env
 .env.local

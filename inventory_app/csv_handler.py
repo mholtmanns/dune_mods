@@ -7,7 +7,8 @@ import sys
 from datetime import datetime
 from typing import Any, Dict, List
 
-from inventory_app.config import CSV_HEADER, CSV_PATH
+from inventory_app.config import CSV_HEADER
+import inventory_app.config as config
 
 
 def log(message: str, verbose: bool = False) -> None:
@@ -75,7 +76,7 @@ def read_csv_data(path: str) -> Dict[str, List[str]]:
 
 def update_inventory_csv(
     items: List[Dict[str, Any]], 
-    path: str = CSV_PATH, 
+    path: str | None = None, 
     verbose: bool = False
 ) -> None:
     """
@@ -88,6 +89,10 @@ def update_inventory_csv(
     """
     if not items:
         return
+    
+    # Use current config value if path not provided
+    if path is None:
+        path = config.CSV_PATH
 
     ensure_csv_header(path, verbose)
     

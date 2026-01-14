@@ -10,6 +10,7 @@ from typing import Any, Dict, List, Tuple
 
 import mss
 import inventory_app.config as config
+from inventory_app.config_manager import get_config_manager
 
 
 class MonitorOverlay:
@@ -373,6 +374,7 @@ class ConfigUI:
         self.root.geometry("700x700")
         self.app_running = False
         self.config_widgets: Dict[str, Any] = {}
+        self.config_manager = get_config_manager()
         self.selected_monitor_index = config.MONITOR_INDEX
         self.pending_crop_region = None
         self.crop_selector = None
@@ -406,6 +408,14 @@ class ConfigUI:
         title_label.grid(row=0, column=0, columnspan=2, pady=(0, 20))
         
         row = 1
+        
+        # Config File Path (editable with browse button)
+        config_file_path = self.config_manager.get_config_path()
+        row = self._add_config_file_field(main_frame, "Config File", config_file_path, row)
+        
+        # Add reload button next to config file
+        reload_btn = ttk.Button(main_frame, text="Reload Config", command=self._reload_config_file)
+        reload_btn.grid(row=row-1, column=2, padx=5, sticky=tk.W)
         
         # Hotkey (editable text)
         row = self._add_text_field(main_frame, "Hotkey", config.HOTKEY, row)
@@ -640,6 +650,36 @@ class ConfigUI:
             self.crop_selector.close()
             self.crop_selector = None
     
+    def _add_config_file_field(self, parent: ttk.Frame, label: str, value: str, row: int) -> int:
+        """Add a config file path field with browse button (allows creating new files)."""
+        ttk.Label(parent, text=f"{label}:", font=("Arial", 9, "bold")).grid(
+            row=row, column=0, sticky=tk.W, pady=5, padx=(0, 10)
+        )
+        frame = ttk.Frame(parent)
+        frame.grid(row=row, column=1, sticky=(tk.W, tk.E), pady=5)
+        frame.columnconfigure(0, weight=1)
+        
+        entry = ttk.Entry(frame, width=40)
+        entry.insert(0, str(value))
+        entry.grid(row=0, column=0, sticky=(tk.W, tk.E), padx=(0, 5))
+        
+        browse_button = ttk.Button(frame, text="Browse...", 
+                                   command=lambda: self._browse_config_file(entry))
+        browse_button.grid(row=0, column=1)
+        
+        self.config_widgets[label] = entry
+        return row + 1
+    
+    def _browse_config_file(self, entry: ttk.Entry) -> None:
+        """Open file browser to select an existing config file to load."""
+        filename = filedialog.askopenfilename(
+            filetypes=[("JSON files", "*.json"), ("YAML files", "*.yaml *.yml"), ("All files", "*.*")],
+            title="Select Config File to Load"
+        )
+        if filename:
+            entry.delete(0, tk.END)
+            entry.insert(0, filename)
+    
     def _browse_file(self, entry: ttk.Entry, filetypes: List[Tuple[str, str]] = None) -> None:
         """Open file browser and update entry."""
         filename = filedialog.askopenfilename(filetypes=filetypes)
@@ -663,7 +703,7 @@ class ConfigUI:
             monitor_desc = self._get_monitor_description(idx, monitor_info)
             btn = ttk.Button(
                 monitor_frame,
-                text=f"Monitor {idx}: {monitor_desc}",
+                text=f"{idx}: {monitor_desc}",
                 command=lambda i=idx: self._select_monitor(i),
                 width=30
             )
@@ -700,95 +740,83 @@ class ConfigUI:
             else:
                 btn.config(state=tk.NORMAL)
     
-    def _save_config(self) -> None:
-        """Save configuration to config.py file."""
+    def _reload_config_file(self) -> None:
+        """Reload configuration from the selected config file."""
         try:
-            # Read current config.py
-            config_path = "inventory_app/config.py"
-            with open(config_path, "r", encoding="utf-8") as f:
-                lines = f.readlines()
+            config_file_path = self.config_widgets["Config File"].get()
+            if config_file_path:
+                # Update config manager path and reload
+                self.config_manager.set_config_path(config_file_path)
+                config.reload_config(config_file_path)
+                
+                # Reload UI values
+                self._reload_ui_values()
+                
+                messagebox.showinfo("Success", f"Configuration reloaded from:\n{config_file_path}")
+            else:
+                messagebox.showwarning("No Config File", "Please specify a config file path first.")
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to reload configuration:\n{e}")
+    
+    def _reload_ui_values(self) -> None:
+        """Reload UI field values from current config."""
+        # Update all fields from config
+        self.config_widgets["Hotkey"].delete(0, tk.END)
+        self.config_widgets["Hotkey"].insert(0, config.HOTKEY)
+        
+        self.config_widgets["Save Debug Images"].set(config.SAVE_DEBUG_IMAGES)
+        
+        self.config_widgets["CSV File Path"].delete(0, tk.END)
+        self.config_widgets["CSV File Path"].insert(0, config.CSV_PATH)
+        
+        self.config_widgets["Tesseract Executable"].delete(0, tk.END)
+        self.config_widgets["Tesseract Executable"].insert(0, config.pytesseract.pytesseract.tesseract_cmd)
+        
+        self.config_widgets["Ollama API URL"].delete(0, tk.END)
+        self.config_widgets["Ollama API URL"].insert(0, config.OLLAMA_URL)
+        
+        self.config_widgets["LLM Model Name"].delete(0, tk.END)
+        self.config_widgets["LLM Model Name"].insert(0, config.MODEL_NAME)
+        
+        # Update monitor selection
+        self.selected_monitor_index = config.MONITOR_INDEX
+        for idx, btn in self.monitor_buttons:
+            if idx == self.selected_monitor_index:
+                btn.config(state=tk.DISABLED)
+            else:
+                btn.config(state=tk.NORMAL)
+        
+        # Update crop region display
+        if config.CROP_REGION:
+            crop_str = f"left={config.CROP_REGION['left']}, top={config.CROP_REGION['top']}, "
+            crop_str += f"width={config.CROP_REGION['width']}, height={config.CROP_REGION['height']}"
+        else:
+            crop_str = "None (full monitor)"
+        self.crop_status_label.config(text=crop_str)
+    
+    def _save_config(self) -> None:
+        """Save configuration to user config file (JSON/YAML)."""
+        try:
+            # Check if config file path changed
+            new_config_path = self.config_widgets["Config File"].get()
+            if new_config_path and new_config_path != self.config_manager.get_config_path():
+                # User changed config file path, switch to it
+                self.config_manager.set_config_path(new_config_path)
             
-            # Update values
-            updates = {
-                "HOTKEY": f'"{self.config_widgets["Hotkey"].get()}"',
-                "MONITOR_INDEX": str(self.selected_monitor_index),
-                "SAVE_DEBUG_IMAGES": str(self.config_widgets["Save Debug Images"].get()),
-                "CSV_PATH": f'"{self.config_widgets["CSV File Path"].get()}"',
-                "OLLAMA_URL": f'"{self.config_widgets["Ollama API URL"].get()}"',
-                "MODEL_NAME": f'"{self.config_widgets["LLM Model Name"].get()}"',
-            }
+            # Update config manager with all values
+            config.update_config(
+                hotkey=self.config_widgets["Hotkey"].get(),
+                monitor_index=self.selected_monitor_index,
+                save_debug_images=self.config_widgets["Save Debug Images"].get(),
+                csv_path=self.config_widgets["CSV File Path"].get(),
+                tesseract_cmd=self.config_widgets["Tesseract Executable"].get(),
+                ollama_url=self.config_widgets["Ollama API URL"].get(),
+                model_name=self.config_widgets["LLM Model Name"].get(),
+            )
             
             # Handle crop region if accepted
-            crop_region_pattern = "CROP_REGION ="
             if self.pending_crop_region:
-                crop_dict = self.pending_crop_region
-                updates["CROP_REGION"] = f'{{"left": {crop_dict["left"]}, "top": {crop_dict["top"]}, "width": {crop_dict["width"]}, "height": {crop_dict["height"]}}}'
-            
-            # Update tesseract path (special handling - it's an attribute assignment)
-            tesseract_path = self.config_widgets["Tesseract Executable"].get()
-            tesseract_line_pattern = "pytesseract.pytesseract.tesseract_cmd"
-            
-            # Write updated config
-            new_lines = []
-            skip_next_line = False  # Skip comment lines after CROP_REGION
-            
-            for i, line in enumerate(lines):
-                if skip_next_line:
-                    skip_next_line = False
-                    continue
-                
-                updated = False
-                
-                # Special handling for tesseract path
-                if tesseract_line_pattern in line and ("=" in line):
-                    comment = ""
-                    if "#" in line:
-                        comment = " " + line[line.index("#"):].rstrip()
-                    new_lines.append(f"{tesseract_line_pattern} = r\"{tesseract_path}\"{comment}\n")
-                    updated = True
-                
-                # Special handling for crop region (multi-line)
-                if crop_region_pattern in line and not updated:
-                    if self.pending_crop_region:
-                        # Replace the CROP_REGION line
-                        comment = ""
-                        if "#" in line:
-                            comment = " " + line[line.index("#"):].rstrip()
-                        new_lines.append(f"CROP_REGION = {updates['CROP_REGION']}{comment}\n")
-                        updated = True
-                        # Skip the next line if it's a comment
-                        if i + 1 < len(lines) and lines[i + 1].strip().startswith("#"):
-                            skip_next_line = True
-                
-                # Handle other config values
-                if not updated:
-                    for key, value in updates.items():
-                        if key == "CROP_REGION":
-                            continue  # Already handled above
-                        if line.strip().startswith(key + " =") or line.strip().startswith(key + "="):
-                            # Preserve comment if present
-                            comment = ""
-                            if "#" in line:
-                                comment = " " + line[line.index("#"):].rstrip()
-                            new_lines.append(f"{key} = {value}{comment}\n")
-                            updated = True
-                            break
-                
-                if not updated:
-                    new_lines.append(line)
-            
-            with open(config_path, "w", encoding="utf-8") as f:
-                f.writelines(new_lines)
-            
-            # Reload config module to reflect changes
-            import importlib
-            importlib.reload(config)
-            
-            # Also update pytesseract path immediately
-            config.pytesseract.pytesseract.tesseract_cmd = tesseract_path
-            
-            # Clear pending crop region after save
-            if self.pending_crop_region:
+                config.update_config(crop_region=self.pending_crop_region)
                 self.pending_crop_region = None
                 # Update display to remove "(pending)" text
                 if config.CROP_REGION:
@@ -796,7 +824,15 @@ class ConfigUI:
                     crop_str += f"width={config.CROP_REGION['width']}, height={config.CROP_REGION['height']}"
                     self.crop_status_label.config(text=crop_str)
             
-            messagebox.showinfo("Success", "Configuration saved successfully!\n\nNote: Restart the app for changes to take effect.")
+            # Save to file
+            self.config_manager.save_config()
+            
+            # Reload config module to reflect changes
+            config.reload_config()
+            
+            messagebox.showinfo("Success", 
+                              f"Configuration saved successfully to:\n{self.config_manager.get_config_path()}\n\n"
+                              f"Note: Restart the app for changes to take effect.")
             
         except Exception as e:
             messagebox.showerror("Error", f"Failed to save configuration:\n{e}")
