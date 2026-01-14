@@ -70,9 +70,20 @@ def main() -> None:
         action="store_true",
         help="Enable verbose/debug output.",
     )
+    parser.add_argument(
+        "--config",
+        action="store_true",
+        help="Show configuration UI and exit.",
+    )
 
     args = parser.parse_args()
     VERBOSE = args.verbose
+    
+    # If --config flag is set, show UI and exit
+    if args.config:
+        from inventory_app.ui import show_config_ui
+        show_config_ui()
+        return
 
     print("Inventory Screenshot App")
     print("========================")

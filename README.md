@@ -29,6 +29,7 @@ The app is organized into a modular structure:
   - `llm_client.py` - Communication with Ollama vision LLM API
   - `csv_handler.py` - CSV file operations (header management, reading/updating inventory data)
   - `queue_processor.py` - Background queue system for asynchronous screenshot processing
+  - `ui.py` - Configuration UI window (step 1: display only)
 
 ### 1. Prerequisites
 
@@ -86,6 +87,14 @@ Useful options:
   ```bash
   python main.py --verbose
   ```
+
+- **Show configuration UI**:
+
+  ```bash
+  python main.py --config
+  ```
+
+  This opens a window displaying all current configuration settings (read-only). Useful for quickly checking your setup without editing `config.py`.
 
 You should see a message similar to:
 
