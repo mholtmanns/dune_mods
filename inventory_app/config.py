@@ -14,7 +14,7 @@ HOTKEY = "ctrl+alt+."
 #   1 = primary monitor (mss default)
 #   0 = all monitors combined (virtual bounding box)
 #   2, 3, ... = specific monitor by mss index
-MONITOR_INDEX = 3
+MONITOR_INDEX = 1
 
 # Optional crop rectangle (in pixels) relative to the chosen monitor's origin.
 # If None, the full monitor is captured.
