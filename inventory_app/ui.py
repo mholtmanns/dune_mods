@@ -499,11 +499,8 @@ class ConfigUI:
         
         # Config File Path (editable with browse button)
         config_file_path = self.config_manager.get_config_path()
-        row = self._add_config_file_field(main_frame, "Config File", config_file_path, row)
-        
-        # Add reload button next to config file
-        reload_btn = ttk.Button(main_frame, text="Reload Config", command=self._reload_config_file)
-        reload_btn.grid(row=row-1, column=2, padx=5, sticky=tk.W)
+        row = self._add_config_file_field(main_frame, "Config File", config_file_path, row, 
+                                         reload_callback=self._reload_config_file)
         
         # Hotkey (editable text)
         row = self._add_text_field(main_frame, "Hotkey", config.HOTKEY, row)
@@ -770,7 +767,8 @@ class ConfigUI:
             self.crop_selector.close()
             self.crop_selector = None
     
-    def _add_config_file_field(self, parent: ttk.Frame, label: str, value: str, row: int) -> int:
+    def _add_config_file_field(self, parent: ttk.Frame, label: str, value: str, row: int, 
+                               reload_callback=None) -> int:
         """Add a config file path field with browse button (allows creating new files)."""
         ttk.Label(parent, text=f"{label}:", font=("Arial", 9, "bold")).grid(
             row=row, column=0, sticky=tk.W, pady=5, padx=(0, 10)
@@ -785,7 +783,12 @@ class ConfigUI:
         
         browse_button = ttk.Button(frame, text="Browse...", 
                                    command=lambda: self._browse_config_file(entry))
-        browse_button.grid(row=0, column=1)
+        browse_button.grid(row=0, column=1, padx=(0, 5))
+        
+        # Add reload button if callback provided (for config file field)
+        if reload_callback:
+            reload_button = ttk.Button(frame, text="Reload Config", command=reload_callback)
+            reload_button.grid(row=0, column=2, padx=2)
         
         self.config_widgets[label] = entry
         return row + 1
