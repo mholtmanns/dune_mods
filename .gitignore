@@ -61,6 +61,7 @@ config.yml
 *.config.json
 *.config.yaml
 *.config.yml
+.last_config_path
 
 # Environment variables
 .env

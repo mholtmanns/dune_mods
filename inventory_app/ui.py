@@ -802,6 +802,9 @@ class ConfigUI:
         if filename:
             entry.delete(0, tk.END)
             entry.insert(0, filename)
+            # Save the selected path as last used (will be saved when reloaded or when config is saved)
+            from inventory_app.config_manager import save_last_config_path
+            save_last_config_path(filename)
     
     def _browse_file(self, entry: ttk.Entry, filetypes: List[Tuple[str, str]] = None) -> None:
         """Open file browser and update entry."""
@@ -884,7 +887,7 @@ class ConfigUI:
         try:
             config_file_path = self.config_widgets["Config File"].get()
             if config_file_path:
-                # Update config manager path and reload
+                # Update config manager path and reload (this will also save to .last_config_path)
                 self.config_manager.set_config_path(config_file_path)
                 config.reload_config(config_file_path)
                 
@@ -932,7 +935,7 @@ class ConfigUI:
             # Check if config file path changed
             new_config_path = self.config_widgets["Config File"].get()
             if new_config_path and new_config_path != self.config_manager.get_config_path():
-                # User changed config file path, switch to it
+                # User changed config file path, switch to it (this will also save to .last_config_path)
                 self.config_manager.set_config_path(new_config_path)
             
             # Update config manager with all values

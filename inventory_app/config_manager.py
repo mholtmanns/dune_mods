@@ -14,6 +14,9 @@ try:
 except ImportError:
     YAML_AVAILABLE = False
 
+# File to store the last used config file path
+LAST_CONFIG_PATH_FILE = ".last_config_path"
+
 # Default values (used when no user config file exists)
 # These match the defaults in config.py but are defined here to avoid circular imports
 _DEFAULT_HOTKEY = "ctrl+alt+."
@@ -26,6 +29,28 @@ _DEFAULT_OLLAMA_URL = "http://localhost:11434/api/generate"
 _DEFAULT_MODEL_NAME = "qwen3-vl:8b"
 
 
+def get_last_config_path() -> Optional[str]:
+    """Read the last used config file path from .last_config_path file."""
+    try:
+        if os.path.exists(LAST_CONFIG_PATH_FILE):
+            with open(LAST_CONFIG_PATH_FILE, 'r', encoding='utf-8') as f:
+                path = f.read().strip()
+                if path and os.path.exists(path):
+                    return path
+    except Exception as e:
+        print(f"Warning: Could not read last config path: {e}", file=sys.stderr)
+    return None
+
+
+def save_last_config_path(config_path: str) -> None:
+    """Save the config file path to .last_config_path file."""
+    try:
+        with open(LAST_CONFIG_PATH_FILE, 'w', encoding='utf-8') as f:
+            f.write(config_path)
+    except Exception as e:
+        print(f"Warning: Could not save last config path: {e}", file=sys.stderr)
+
+
 class ConfigManager:
     """Manages user-specific configuration file (JSON or YAML)."""
     
@@ -34,16 +59,26 @@ class ConfigManager:
         Initialize config manager.
         
         Args:
-            config_path: Path to user config file. If None, uses default location.
+            config_path: Path to user config file. If None, checks for last used path,
+                        then falls back to default location.
         """
         if config_path:
             self.config_path = Path(config_path)
         else:
-            # Default: config.json in the project directory
-            self.config_path = Path("config.json")
+            # Check for last used config path
+            last_path = get_last_config_path()
+            if last_path:
+                self.config_path = Path(last_path)
+            else:
+                # Default: config.json in the project directory
+                self.config_path = Path("config.json")
         
         self.config_data: Dict[str, Any] = {}
         self._load_config()
+        
+        # Save the path we're using (if it's a valid file)
+        if self.config_path.exists():
+            save_last_config_path(str(self.config_path))
     
     def _load_config(self) -> None:
         """Load configuration from file, or use defaults if file doesn't exist."""
@@ -115,6 +150,8 @@ class ConfigManager:
         """Change the config file path and reload."""
         self.config_path = Path(path)
         self._load_config()
+        # Save the new path as the last used
+        save_last_config_path(str(self.config_path))
 
 
 # Global config manager instance (initialized on first import)
