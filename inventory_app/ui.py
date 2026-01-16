@@ -382,6 +382,7 @@ class ConfigUI:
         self.crop_discard_button = None
         self.crop_status_label = None
         
+        
         # Create scrollable frame
         canvas = tk.Canvas(root)
         scrollbar = ttk.Scrollbar(root, orient="vertical", command=canvas.yview)
@@ -688,40 +689,56 @@ class ConfigUI:
             entry.insert(0, filename)
     
     def _add_monitor_selection(self, parent: ttk.Frame, row: int) -> int:
-        """Add monitor selection with buttons."""
+        """Add monitor selection with buttons spanning two rows."""
         ttk.Label(parent, text="Monitor Selection:", font=("Arial", 9, "bold")).grid(
-            row=row, column=0, sticky=tk.W, pady=5, padx=(0, 10)
+            row=row, column=0, rowspan=2, sticky=(tk.W, tk.N), pady=5, padx=(0, 10)
         )
         
         monitor_frame = ttk.Frame(parent)
-        monitor_frame.grid(row=row, column=1, sticky=(tk.W, tk.E), pady=5)
+        monitor_frame.grid(row=row, column=1, rowspan=2, sticky=(tk.W, tk.E), pady=5)
         
         monitors = enumerate_monitors()
         self.monitor_buttons = []
         
-        for idx, monitor_info in monitors:
-            monitor_desc = self._get_monitor_description(idx, monitor_info)
-            btn = ttk.Button(
+        # Arrange buttons in a grid with 2 rows
+        buttons_per_row = (len(monitors) + 1) // 2  # Round up division
+        
+        for button_idx, (monitor_idx, monitor_info) in enumerate(monitors):
+            monitor_desc = self._get_monitor_description(monitor_idx, monitor_info)
+            btn = tk.Button(
                 monitor_frame,
-                text=f"{idx}: {monitor_desc}",
-                command=lambda i=idx: self._select_monitor(i),
+                text=f"{monitor_idx}: {monitor_desc}",
+                command=lambda i=monitor_idx: self._select_monitor(i),
                 width=30
             )
-            btn.pack(side=tk.LEFT, padx=2)
-            self.monitor_buttons.append((idx, btn))
             
-            # Highlight current selection
-            if idx == self.selected_monitor_index:
-                btn.config(state=tk.DISABLED)
+            # Calculate grid position: first half in row 0, second half in row 1
+            if button_idx < buttons_per_row:
+                btn_row = 0
+                btn_col = button_idx
+            else:
+                btn_row = 1
+                btn_col = button_idx - buttons_per_row
+            
+            btn.grid(row=btn_row, column=btn_col, padx=2, pady=2, sticky=(tk.W, tk.E))
+            self.monitor_buttons.append((monitor_idx, btn))
+            
+            # Highlight current selection with light green color
+            if monitor_idx == self.selected_monitor_index:
+                btn.config(state=tk.DISABLED, bg="#90EE90", fg="black")
+            else:
+                btn.config(bg="SystemButtonFace", fg="SystemButtonText")  # Default system colors
         
-        return row + 1
+        # Make columns expand evenly
+        for col in range(buttons_per_row):
+            monitor_frame.columnconfigure(col, weight=1)
+        
+        return row + 2
     
     def _get_monitor_description(self, idx: int, monitor: Dict[str, int]) -> str:
         """Get a description for a monitor."""
         if idx == 0:
             return "All monitors"
-        elif idx == 1:
-            return f"Primary ({monitor['width']}x{monitor['height']})"
         else:
             return f"{monitor['width']}x{monitor['height']}"
     
@@ -733,12 +750,12 @@ class ConfigUI:
         overlay = MonitorOverlay(self.root, monitor_index, f"MONITOR {monitor_index}\nSELECTED", duration=3.0)
         overlay.show()
         
-        # Update button states
+        # Update button states and colors
         for idx, btn in self.monitor_buttons:
             if idx == monitor_index:
-                btn.config(state=tk.DISABLED)
+                btn.config(state=tk.DISABLED, bg="#90EE90", fg="black")
             else:
-                btn.config(state=tk.NORMAL)
+                btn.config(state=tk.NORMAL, bg="SystemButtonFace", fg="SystemButtonText")
     
     def _reload_config_file(self) -> None:
         """Reload configuration from the selected config file."""
@@ -782,9 +799,9 @@ class ConfigUI:
         self.selected_monitor_index = config.MONITOR_INDEX
         for idx, btn in self.monitor_buttons:
             if idx == self.selected_monitor_index:
-                btn.config(state=tk.DISABLED)
+                btn.config(state=tk.DISABLED, bg="#90EE90", fg="black")
             else:
-                btn.config(state=tk.NORMAL)
+                btn.config(state=tk.NORMAL, bg="SystemButtonFace", fg="SystemButtonText")
         
         # Update crop region display
         if config.CROP_REGION:
