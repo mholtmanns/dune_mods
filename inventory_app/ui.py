@@ -63,6 +63,93 @@ class MonitorOverlay:
             print(f"Error showing overlay: {e}", file=sys.stderr)
 
 
+class CropRegionOverlay:
+    """Overlay window to display the current crop rectangle on a monitor."""
+    
+    def __init__(self, root: tk.Tk, monitor_index: int, crop_region: Dict[str, int], 
+                 close_callback=None):
+        self.root = root
+        self.monitor_index = monitor_index
+        self.crop_region = crop_region
+        self.close_callback = close_callback
+        self.overlay_window = None
+        self.canvas = None
+    
+    def show(self) -> None:
+        """Show the crop rectangle overlay."""
+        try:
+            with mss.mss() as sct:
+                monitors = sct.monitors
+                if self.monitor_index < 0 or self.monitor_index >= len(monitors):
+                    return
+                
+                monitor = monitors[self.monitor_index]
+                
+                # Create fullscreen overlay window
+                self.overlay_window = tk.Toplevel(self.root)
+                self.overlay_window.overrideredirect(True)
+                self.overlay_window.attributes('-topmost', True)
+                self.overlay_window.attributes('-alpha', 0.2)  # Very transparent background
+                self.overlay_window.configure(bg='black')
+                self.overlay_window.geometry(f"{monitor['width']}x{monitor['height']}+{monitor['left']}+{monitor['top']}")
+                
+                # Create canvas for drawing
+                self.canvas = tk.Canvas(
+                    self.overlay_window,
+                    bg='black',
+                    highlightthickness=0
+                )
+                self.canvas.pack(fill=tk.BOTH, expand=True)
+                
+                # Draw the crop rectangle
+                if self.crop_region:
+                    left = self.crop_region['left']
+                    top = self.crop_region['top']
+                    right = left + self.crop_region['width']
+                    bottom = top + self.crop_region['height']
+                    
+                    # Draw rectangle with red outline
+                    self.canvas.create_rectangle(
+                        left, top, right, bottom,
+                        outline='red',
+                        width=4,
+                        fill='',
+                        stipple='gray25'
+                    )
+                    
+                    # Add label showing crop info
+                    self.canvas.create_text(
+                        monitor['width'] // 2,
+                        50,
+                        text=f"Crop Region: {self.crop_region['width']}x{self.crop_region['height']} at ({left}, {top})\nPress ESC to close",
+                        fill='yellow',
+                        font=("Arial", 18, "bold"),
+                        anchor=tk.CENTER
+                    )
+                
+                # Bind Escape key to close
+                self.overlay_window.bind('<Escape>', self._close)
+                self.canvas.bind('<Escape>', self._close)
+                
+                # Make window focusable
+                self.overlay_window.focus_set()
+                self.canvas.focus_set()
+                
+                self.overlay_window.update()
+                
+        except Exception as e:
+            print(f"Error showing crop region overlay: {e}", file=sys.stderr)
+    
+    def _close(self, event=None) -> None:
+        """Close the overlay window."""
+        if self.overlay_window:
+            self.overlay_window.destroy()
+            self.overlay_window = None
+            # Call callback to re-enable buttons
+            if self.close_callback:
+                self.close_callback()
+
+
 def enumerate_monitors() -> List[Tuple[int, Dict[str, int]]]:
     """Enumerate all available monitors and return list of (index, monitor_dict)."""
     monitors = []
@@ -380,7 +467,7 @@ class ConfigUI:
         self.crop_selector = None
         self.crop_accept_button = None
         self.crop_discard_button = None
-        self.crop_status_label = None
+        self.crop_region_overlay = None
         
         
         # Create scrollable frame
@@ -467,6 +554,9 @@ class ConfigUI:
         close_button = ttk.Button(button_frame, text="Close", 
                                   command=self.root.destroy, width=15)
         close_button.pack(side=tk.LEFT, padx=5)
+        
+        # Bind ESC key to root window to close overlays
+        self.root.bind('<Escape>', self._handle_escape_key)
     
     def _add_text_field(self, parent: ttk.Frame, label: str, value: str, row: int) -> int:
         """Add an editable text field."""
@@ -530,20 +620,15 @@ class ConfigUI:
         crop_frame = ttk.Frame(parent)
         crop_frame.grid(row=row, column=1, sticky=(tk.W, tk.E), pady=5)
         
-        # Current crop display
-        if config.CROP_REGION:
-            crop_str = f"left={config.CROP_REGION['left']}, top={config.CROP_REGION['top']}, "
-            crop_str += f"width={config.CROP_REGION['width']}, height={config.CROP_REGION['height']}"
-        else:
-            crop_str = "None (full monitor)"
-        
-        self.crop_status_label = ttk.Label(crop_frame, text=crop_str, font=("Arial", 9))
-        self.crop_status_label.pack(side=tk.LEFT, padx=(0, 10))
+        # Show Crop Area button (replaces text label)
+        self.show_crop_button = ttk.Button(crop_frame, text="Show Crop Area", 
+                                          command=self._show_crop_region)
+        self.show_crop_button.pack(side=tk.LEFT, padx=(0, 10))
         
         # Select button
-        select_button = ttk.Button(crop_frame, text="Select Crop Area", 
-                                   command=self._start_crop_selection)
-        select_button.pack(side=tk.LEFT, padx=2)
+        self.select_crop_button = ttk.Button(crop_frame, text="Select Crop Area", 
+                                            command=self._start_crop_selection)
+        self.select_crop_button.pack(side=tk.LEFT, padx=2)
         
         # Accept/Discard buttons (initially hidden)
         self.crop_accept_button = ttk.Button(crop_frame, text="Accept", 
@@ -556,12 +641,69 @@ class ConfigUI:
         
         return row + 1
     
+    def _show_crop_region(self) -> None:
+        """Show the current crop region overlay on the selected monitor."""
+        if self.selected_monitor_index is None:
+            messagebox.showwarning("No Monitor Selected", 
+                                 "Please select a monitor first.")
+            return
+        
+        # Use pending crop region if available, otherwise use config
+        crop_region_to_show = self.pending_crop_region if self.pending_crop_region else config.CROP_REGION
+        
+        if not crop_region_to_show:
+            messagebox.showinfo("No Crop Region", 
+                              "No crop region is currently configured.\n"
+                              "Use 'Select Crop Area' to define one.")
+            return
+        
+        # Close existing overlay if any
+        if self.crop_region_overlay and self.crop_region_overlay.overlay_window:
+            self.crop_region_overlay._close()
+        
+        # Disable crop-related buttons while overlay is showing
+        self.show_crop_button.config(state=tk.DISABLED)
+        self.select_crop_button.config(state=tk.DISABLED)
+        if self.crop_accept_button:
+            self.crop_accept_button.config(state=tk.DISABLED)
+        if self.crop_discard_button:
+            self.crop_discard_button.config(state=tk.DISABLED)
+        
+        # Create and show new overlay with callback to re-enable buttons
+        self.crop_region_overlay = CropRegionOverlay(
+            self.root,
+            self.selected_monitor_index,
+            crop_region_to_show,
+            self._on_crop_overlay_closed
+        )
+        self.crop_region_overlay.show()
+    
+    def _on_crop_overlay_closed(self) -> None:
+        """Callback when crop region overlay is closed - re-enable buttons."""
+        # Re-enable crop-related buttons
+        self.show_crop_button.config(state=tk.NORMAL)
+        self.select_crop_button.config(state=tk.NORMAL)
+        # Re-enable Accept/Discard if there's a pending crop
+        if self.pending_crop_region:
+            self.crop_accept_button.config(state=tk.NORMAL)
+            self.crop_discard_button.config(state=tk.NORMAL)
+    
     def _start_crop_selection(self) -> None:
         """Start the interactive crop selection."""
         if self.selected_monitor_index is None:
             messagebox.showwarning("No Monitor Selected", 
                                  "Please select a monitor first before selecting crop region.")
             return
+        
+        # Check if crop region overlay is showing
+        if self.crop_region_overlay and self.crop_region_overlay.overlay_window:
+            messagebox.showwarning("Overlay Active", 
+                                 "Please close the crop region overlay first (press ESC).")
+            return
+        
+        # Disable buttons while selection is active
+        self.show_crop_button.config(state=tk.DISABLED)
+        self.select_crop_button.config(state=tk.DISABLED)
         
         # Create crop selector
         self.crop_selector = CropSelector(
@@ -573,6 +715,10 @@ class ConfigUI:
     
     def _on_crop_selected(self, crop_region: Dict[str, int] | None) -> None:
         """Callback when crop region is selected."""
+        # Re-enable buttons
+        self.show_crop_button.config(state=tk.NORMAL)
+        self.select_crop_button.config(state=tk.NORMAL)
+        
         if crop_region is None:
             # Selection was cancelled (ESC pressed or other cancellation)
             if self.crop_selector:
@@ -582,14 +728,6 @@ class ConfigUI:
             # Clear pending crop region and reset UI state
             self.pending_crop_region = None
             
-            # Reset status label to current config
-            if config.CROP_REGION:
-                crop_str = f"left={config.CROP_REGION['left']}, top={config.CROP_REGION['top']}, "
-                crop_str += f"width={config.CROP_REGION['width']}, height={config.CROP_REGION['height']}"
-            else:
-                crop_str = "None (full monitor)"
-            self.crop_status_label.config(text=crop_str)
-            
             # Disable Accept/Discard buttons
             self.crop_accept_button.config(state=tk.DISABLED)
             self.crop_discard_button.config(state=tk.DISABLED)
@@ -598,11 +736,6 @@ class ConfigUI:
         # Store pending crop region
         self.pending_crop_region = crop_region
         
-        # Update status label
-        crop_str = f"left={crop_region['left']}, top={crop_region['top']}, "
-        crop_str += f"width={crop_region['width']}, height={crop_region['height']}"
-        self.crop_status_label.config(text=crop_str + " (pending)")
-        
         # Enable Accept/Discard buttons
         self.crop_accept_button.config(state=tk.NORMAL)
         self.crop_discard_button.config(state=tk.NORMAL)
@@ -610,12 +743,6 @@ class ConfigUI:
     def _accept_crop(self) -> None:
         """Accept the selected crop region."""
         if self.pending_crop_region:
-            # Update the config widget (we'll save it when Save Config is clicked)
-            # For now, just update the display
-            crop_str = f"left={self.pending_crop_region['left']}, top={self.pending_crop_region['top']}, "
-            crop_str += f"width={self.pending_crop_region['width']}, height={self.pending_crop_region['height']}"
-            self.crop_status_label.config(text=crop_str)
-            
             # Disable buttons
             self.crop_accept_button.config(state=tk.DISABLED)
             self.crop_discard_button.config(state=tk.DISABLED)
@@ -631,14 +758,6 @@ class ConfigUI:
     
     def _discard_crop(self) -> None:
         """Discard the selected crop region."""
-        # Reset to current config
-        if config.CROP_REGION:
-            crop_str = f"left={config.CROP_REGION['left']}, top={config.CROP_REGION['top']}, "
-            crop_str += f"width={config.CROP_REGION['width']}, height={config.CROP_REGION['height']}"
-        else:
-            crop_str = "None (full monitor)"
-        self.crop_status_label.config(text=crop_str)
-        
         # Clear pending crop
         self.pending_crop_region = None
         
@@ -803,13 +922,6 @@ class ConfigUI:
             else:
                 btn.config(state=tk.NORMAL, bg="SystemButtonFace", fg="SystemButtonText")
         
-        # Update crop region display
-        if config.CROP_REGION:
-            crop_str = f"left={config.CROP_REGION['left']}, top={config.CROP_REGION['top']}, "
-            crop_str += f"width={config.CROP_REGION['width']}, height={config.CROP_REGION['height']}"
-        else:
-            crop_str = "None (full monitor)"
-        self.crop_status_label.config(text=crop_str)
     
     def _save_config(self) -> None:
         """Save configuration to user config file (JSON/YAML)."""
@@ -835,11 +947,6 @@ class ConfigUI:
             if self.pending_crop_region:
                 config.update_config(crop_region=self.pending_crop_region)
                 self.pending_crop_region = None
-                # Update display to remove "(pending)" text
-                if config.CROP_REGION:
-                    crop_str = f"left={config.CROP_REGION['left']}, top={config.CROP_REGION['top']}, "
-                    crop_str += f"width={config.CROP_REGION['width']}, height={config.CROP_REGION['height']}"
-                    self.crop_status_label.config(text=crop_str)
             
             # Save to file
             self.config_manager.save_config()
@@ -905,6 +1012,18 @@ class ConfigUI:
         """Show an error message."""
         messagebox.showerror("Error", error_msg)
         self._app_stopped()
+    
+    def _handle_escape_key(self, event=None) -> None:
+        """Handle ESC key press to close active overlays."""
+        # Close crop region overlay if active
+        if self.crop_region_overlay and self.crop_region_overlay.overlay_window:
+            self.crop_region_overlay._close()
+            return
+        
+        # Close crop selector if active
+        if self.crop_selector and self.crop_selector.overlay_window:
+            self.crop_selector._cancel()
+            return
 
 
 def show_config_ui() -> None:
