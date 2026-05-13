@@ -25,8 +25,10 @@ _DEFAULT_CROP_REGION = {"left": 835, "top": 900, "width": 1360, "height": 300}
 _DEFAULT_SAVE_DEBUG_IMAGES = False
 _DEFAULT_CSV_PATH = "inventory_log.csv"
 _DEFAULT_TESSERACT_CMD = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
-_DEFAULT_OLLAMA_URL = "http://localhost:11434/api/generate"
+_DEFAULT_OLLAMA_URL = "http://localhost:12000/api/generate"
 _DEFAULT_MODEL_NAME = "qwen3-vl:8b"
+_DEFAULT_OLLAMA_TIMEOUT_SECONDS = 180
+_DEFAULT_OLLAMA_RETRIES = 2
 
 
 def get_last_config_path() -> Optional[str]:
@@ -114,6 +116,8 @@ class ConfigManager:
             "tesseract_cmd": _DEFAULT_TESSERACT_CMD,
             "ollama_url": _DEFAULT_OLLAMA_URL,
             "model_name": _DEFAULT_MODEL_NAME,
+            "ollama_timeout_seconds": _DEFAULT_OLLAMA_TIMEOUT_SECONDS,
+            "ollama_retries": _DEFAULT_OLLAMA_RETRIES,
         }
     
     def save_config(self) -> None:

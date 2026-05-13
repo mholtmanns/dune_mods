@@ -18,8 +18,11 @@ _DEFAULT_CROP_REGION = {"left": 835, "top": 900, "width": 1360, "height": 300}
 _DEFAULT_SAVE_DEBUG_IMAGES = False
 _DEFAULT_CSV_PATH = "inventory_log.csv"
 _DEFAULT_TESSERACT_CMD = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
-_DEFAULT_OLLAMA_URL = "http://localhost:11434/api/generate"
+_DEFAULT_OLLAMA_URL = "http://localhost:12000/api/generate"
 _DEFAULT_MODEL_NAME = "qwen3-vl:8b"
+_DEFAULT_OLLAMA_API_KEY = ""
+_DEFAULT_OLLAMA_TIMEOUT_SECONDS = 180
+_DEFAULT_OLLAMA_RETRIES = 2
 
 # Initialize Tesseract path from config
 pytesseract.pytesseract.tesseract_cmd = _config.get("tesseract_cmd", _DEFAULT_TESSERACT_CMD)
@@ -41,6 +44,14 @@ def __getattr__(name: str):
         return _config.get("ollama_url", _DEFAULT_OLLAMA_URL)
     elif name == "MODEL_NAME":
         return _config.get("model_name", _DEFAULT_MODEL_NAME)
+    elif name == "OLLAMA_API_KEY":
+        return _config.get("ollama_api_key", _DEFAULT_OLLAMA_API_KEY)
+    elif name == "OLLAMA_TIMEOUT_SECONDS":
+        v = _config.get("ollama_timeout_seconds", _DEFAULT_OLLAMA_TIMEOUT_SECONDS)
+        return int(v) if v is not None else _DEFAULT_OLLAMA_TIMEOUT_SECONDS
+    elif name == "OLLAMA_RETRIES":
+        v = _config.get("ollama_retries", _DEFAULT_OLLAMA_RETRIES)
+        return int(v) if v is not None else _DEFAULT_OLLAMA_RETRIES
     raise AttributeError(f"module '{__name__}' has no attribute '{name}'")
 
 # Functions to update config (for UI to use)
@@ -63,6 +74,12 @@ def update_config(**kwargs) -> None:
         _config.set("ollama_url", kwargs["ollama_url"])
     if "model_name" in kwargs:
         _config.set("model_name", kwargs["model_name"])
+    if "ollama_api_key" in kwargs:
+        _config.set("ollama_api_key", kwargs["ollama_api_key"])
+    if "ollama_timeout_seconds" in kwargs:
+        _config.set("ollama_timeout_seconds", kwargs["ollama_timeout_seconds"])
+    if "ollama_retries" in kwargs:
+        _config.set("ollama_retries", kwargs["ollama_retries"])
 
 def reload_config(config_path: str | None = None) -> None:
     """Reload configuration from file."""

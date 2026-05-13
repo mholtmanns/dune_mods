@@ -2,7 +2,10 @@
 
 This Python app listens for a global hotkey (German **STRG+ALT+.**, i.e. `Ctrl+Alt+.`), captures a cropped area of the screen that contains an inventory/resource list associated with an item to be fabricated, and processes screenshots in the background using a queue system. Each screenshot is split into 8 tiles, pre-screened with Tesseract OCR, sent to a local vision LLM (Ollama), and the recognized items update a CSV file.
 
-The app only works properly if the screenshot is taken while viewing any of the fabricators production screens.
+The app only works properly if the screenshot is taken while viewing any of the fabricators production screens. Below is an example screenshot crop.
+
+![Example Inventory Screenshot](tests/example1.png)
+
 
 **Key Features:**
 - **Background processing**: Take multiple screenshots without waiting - they're queued and processed asynchronously
@@ -234,6 +237,7 @@ You can open the CSV file in Excel, LibreOffice, or any CSV tool to analyze your
 - **Monitor selection**: Click monitor buttons to select (visual feedback provided)
 - **Hotkey**: Edit the hotkey field (e.g., `ctrl+shift+i`)
 - **Ollama model**: Change `MODEL_NAME` to any compatible vision model (e.g. `llama3.2-vision`, `qwen2.5vl:7b`, etc.)
+- **Ollama API key**: Enter your API key (if your Ollama endpoint requires Bearer token auth)
 - **Tesseract path**: Set the path to your Tesseract executable
 
 **Manual Configuration (Advanced):**
@@ -248,6 +252,7 @@ If you prefer to edit config files directly, they use this structure:
   "csv_path": "inventory_log.csv",
   "tesseract_cmd": "C:\\Program Files\\Tesseract-OCR\\tesseract.exe",
   "ollama_url": "http://localhost:11434/api/generate",
+  "ollama_api_key": "",
   "model_name": "qwen3-vl:8b"
 }
 ```

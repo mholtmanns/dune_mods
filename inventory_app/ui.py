@@ -514,18 +514,46 @@ class ConfigUI:
         # Save Debug Images (checkbox)
         row = self._add_checkbox_field(main_frame, "Save Debug Images", config.SAVE_DEBUG_IMAGES, row)
         
+        # Verbose Logging (UI only, not persisted to config)
+        row = self._add_checkbox_field(main_frame, "Verbose Logging (UI only)", False, row)
+        # Keep a direct reference to the BooleanVar for runtime use
+        self.verbose_var = self.config_widgets["Verbose Logging (UI only)"]
+        
         # CSV Path (editable text with browse button)
         row = self._add_file_field(main_frame, "CSV File Path", config.CSV_PATH, row, filetypes=[("CSV files", "*.csv"), ("All files", "*.*")])
         
         # Tesseract Path (editable text with browse button)
-        row = self._add_file_field(main_frame, "Tesseract Executable", config.pytesseract.pytesseract.tesseract_cmd, row, 
-                                   filetypes=[("Executable", "*.exe"), ("All files", "*.*")])
+        row = self._add_file_field(
+            main_frame,
+            "Tesseract Executable",
+            config.pytesseract.pytesseract.tesseract_cmd,
+            row,
+            filetypes=[("Executable", "*.exe"), ("All files", "*.*")]
+        )
         
         # Ollama URL (editable text)
         row = self._add_text_field(main_frame, "Ollama API URL", config.OLLAMA_URL, row)
         
+        # Ollama API Key (editable text, masked)
+        api_key_value = getattr(config, "OLLAMA_API_KEY", "")
+        row = self._add_text_field(main_frame, "Ollama API Key", api_key_value, row)
+        self.config_widgets["Ollama API Key"].config(show="*")
+        
         # Model Name (editable text)
         row = self._add_text_field(main_frame, "LLM Model Name", config.MODEL_NAME, row)
+
+        row = self._add_text_field(
+            main_frame,
+            "Ollama timeout (seconds)",
+            str(getattr(config, "OLLAMA_TIMEOUT_SECONDS", 180)),
+            row,
+        )
+        row = self._add_text_field(
+            main_frame,
+            "Ollama retries on failure",
+            str(getattr(config, "OLLAMA_RETRIES", 2)),
+            row,
+        )
         
         # Status label
         self.status_label = ttk.Label(main_frame, text="App Status: Not Running", 
@@ -917,8 +945,21 @@ class ConfigUI:
         self.config_widgets["Ollama API URL"].delete(0, tk.END)
         self.config_widgets["Ollama API URL"].insert(0, config.OLLAMA_URL)
         
+        if "Ollama API Key" in self.config_widgets:
+            self.config_widgets["Ollama API Key"].delete(0, tk.END)
+            self.config_widgets["Ollama API Key"].insert(0, getattr(config, "OLLAMA_API_KEY", ""))
+        
         self.config_widgets["LLM Model Name"].delete(0, tk.END)
         self.config_widgets["LLM Model Name"].insert(0, config.MODEL_NAME)
+
+        self.config_widgets["Ollama timeout (seconds)"].delete(0, tk.END)
+        self.config_widgets["Ollama timeout (seconds)"].insert(
+            0, str(getattr(config, "OLLAMA_TIMEOUT_SECONDS", 180))
+        )
+        self.config_widgets["Ollama retries on failure"].delete(0, tk.END)
+        self.config_widgets["Ollama retries on failure"].insert(
+            0, str(getattr(config, "OLLAMA_RETRIES", 2))
+        )
         
         # Update monitor selection
         self.selected_monitor_index = config.MONITOR_INDEX
@@ -938,6 +979,15 @@ class ConfigUI:
                 # User changed config file path, switch to it (this will also save to .last_config_path)
                 self.config_manager.set_config_path(new_config_path)
             
+            ollama_timeout_seconds = int(self.config_widgets["Ollama timeout (seconds)"].get().strip())
+            ollama_retries = int(self.config_widgets["Ollama retries on failure"].get().strip())
+            if ollama_timeout_seconds < 30:
+                raise ValueError("Ollama timeout must be at least 30 seconds.")
+            if ollama_timeout_seconds > 7200:
+                raise ValueError("Ollama timeout cannot exceed 7200 seconds.")
+            if ollama_retries < 0 or ollama_retries > 20:
+                raise ValueError("Ollama retries must be between 0 and 20.")
+
             # Update config manager with all values
             config.update_config(
                 hotkey=self.config_widgets["Hotkey"].get(),
@@ -946,7 +996,10 @@ class ConfigUI:
                 csv_path=self.config_widgets["CSV File Path"].get(),
                 tesseract_cmd=self.config_widgets["Tesseract Executable"].get(),
                 ollama_url=self.config_widgets["Ollama API URL"].get(),
+                ollama_api_key=self.config_widgets.get("Ollama API Key").get() if "Ollama API Key" in self.config_widgets else "",
                 model_name=self.config_widgets["LLM Model Name"].get(),
+                ollama_timeout_seconds=ollama_timeout_seconds,
+                ollama_retries=ollama_retries,
             )
             
             # Handle crop region if accepted
@@ -984,7 +1037,9 @@ class ConfigUI:
             
             def run_app():
                 try:
-                    start_app(verbose=False)
+                    # Use the UI verbose checkbox to control runtime verbosity
+                    verbose = bool(getattr(self, "verbose_var", tk.BooleanVar(value=False)).get())
+                    start_app(verbose=verbose)
                 except Exception as e:
                     # Show error in UI
                     self.root.after(0, lambda: self._show_error(str(e)))
